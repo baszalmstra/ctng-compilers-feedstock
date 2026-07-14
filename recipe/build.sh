@@ -179,3 +179,5 @@ fi
   "${GCC_CONFIGURE_OPTIONS[@]}" || (cat config.log; false)
 
 make -j${CPU_COUNT} || (cat ${TARGET}/libgomp/config.log; false)
+
+source "${RECIPE_DIR}/install-all.sh"
