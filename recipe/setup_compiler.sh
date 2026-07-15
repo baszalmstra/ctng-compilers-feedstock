@@ -53,6 +53,24 @@ unset PYTHON
 
 extra_pkgs=()
 
+# package downloads from conda.anaconda.org time out intermittently on the
+# CI runners ("HTTP errors are often intermittent, and a simple retry will
+# get you on your way"); retry the environment creation, removing the
+# partially created prefix in between
+conda_create_with_retry() {
+  local prefix=$1 attempt
+  shift
+  for attempt in 1 2 3; do
+    if conda create -p "${prefix}" --yes --quiet "$@"; then
+      return 0
+    fi
+    rm -rf "${prefix}"
+    echo "conda create -p ${prefix} failed (attempt ${attempt}), retrying" >&2
+    sleep $((attempt * 20))
+  done
+  return 1
+}
+
 export CF_PREFIX=$SRC_DIR/cf-compilers
 
 if [[ ! -d ${SRC_DIR}/cf-compilers ]]; then
@@ -88,7 +106,7 @@ if [[ ! -d ${SRC_DIR}/cf-compilers ]]; then
       )
     fi
     # Remove conda-forge/label/sysroot-with-crypt when GCC < 14 is dropped
-    conda create -p ${CF_PREFIX} -c conda-forge/label/gcc-experimental -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local --yes --quiet \
+    conda_create_with_retry ${CF_PREFIX} -c conda-forge/label/gcc-experimental -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local \
       "gcc_impl_${build_platform}" \
       "gxx_impl_${build_platform}" \
       "gfortran_impl_${build_platform}" \
@@ -100,13 +118,13 @@ if [[ ! -d ${SRC_DIR}/cf-compilers ]]; then
       ${extra_pkgs[@]}
 
     if [[ "${TARGET}" == *darwin* ]]; then
-      CONDA_OVERRIDE_OSX=15.5 CONDA_SUBDIR="${cross_target_platform}" conda create -p $SRC_DIR/cf-compilers-target -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local --yes --quiet libcxx-devel
+      (export CONDA_OVERRIDE_OSX=15.5 CONDA_SUBDIR="${cross_target_platform}"; conda_create_with_retry $SRC_DIR/cf-compilers-target -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local libcxx-devel)
       mkdir -p ${CF_PREFIX}/${TARGET}/lib
       ln -sf $SRC_DIR/cf-compilers-target/lib/libc++* ${CF_PREFIX}/${TARGET}/lib
 
     fi
     if [[ "${HOST}" == *darwin* && "${HOST}" != "${TARGET}" ]]; then
-      CONDA_OVERRIDE_OSX=15.5 CONDA_SUBDIR="${target_platform}" conda create -p $SRC_DIR/cf-compilers-host -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local --yes --quiet libcxx-devel
+      (export CONDA_OVERRIDE_OSX=15.5 CONDA_SUBDIR="${target_platform}"; conda_create_with_retry $SRC_DIR/cf-compilers-host -c conda-forge/label/sysroot-with-crypt -c conda-forge --use-local libcxx-devel)
       mkdir -p ${CF_PREFIX}/${HOST}/lib
       ln -sf $SRC_DIR/cf-compilers-host/lib/libc++* ${CF_PREFIX}/${HOST}/lib
     fi
