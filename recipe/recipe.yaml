@@ -105,6 +105,14 @@ outputs:
           # install-*.sh scripts need.
           PKG_VERSION: ${{ version }}
           PKG_BUILDNUM: ${{ build_num }}
+          # rattler-build clears the process environment before running the
+          # script; forward these from the outer environment (evaluated at
+          # render time in rattler-build's own process):
+          # - CI gates the patch-directory pruning in build.sh
+          # - CONDA_BUILD_SYSROOT becomes SDKROOT (--with-build-sysroot) on
+          #   macOS build lanes
+          CI: ${{ env.get("CI", default="") }}
+          CONDA_BUILD_SYSROOT: ${{ env.get("CONDA_BUILD_SYSROOT", default="") }}
           TARGET: ${{ TARGET }}
           binutils_version: ${{ binutils_version }}
           c_stdlib: ${{ c_stdlib }}
@@ -312,7 +320,8 @@ outputs:
             exists:
               - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.spec"
               - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.*"
-              # libquadmath only exists for x86/ppc targets
+              # only assert libquadmath for win, matching the old test (it
+              # is not built at all for aarch64/riscv64 targets)
               - if: cross_target_win
                 then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libquadmath.*"
               - if: target_platform == cross_target_platform and not cross_target_osx
@@ -986,9 +995,9 @@ outputs:
                   - "${{ path_prefix }}bin/libgfortran-*.dll"
                   - "${{ path_prefix }}lib/libgfortran.dll.a"
               - if: cross_target_osx
-                then: "lib/libgfortran.dylib"
+                then: "${{ path_prefix }}lib/libgfortran.dylib"
               - if: cross_target_linux
-                then: "lib/libgfortran.so"
+                then: "${{ path_prefix }}lib/libgfortran.so"
     about:
       summary: The GNU Fortran Runtime Library
       homepage: https://gcc.gnu.org/
