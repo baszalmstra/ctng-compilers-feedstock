@@ -929,6 +929,10 @@ outputs:
             - if: win
               then: "${{ path_prefix }}bin/libgcc_s_*-*.dll"
             - if: osx
+              then: "${{ path_prefix }}lib/libgcc_s.1.1.dylib"
+            # the libgcc_s.1 compatibility library only exists for osx-64
+            # (see patches/macos/0001-GCC-*-Increase-fallback-min-macOS-*)
+            - if: osx and x86_64
               then: "${{ path_prefix }}lib/libgcc_s.1.dylib"
             - if: linux
               then: "${{ path_prefix }}lib/libgcc_s.so"
