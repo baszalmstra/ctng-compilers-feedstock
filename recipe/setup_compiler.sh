@@ -167,6 +167,17 @@ if [[ "$target_platform" == "win-64" ]]; then
 else
   EXEEXT=""
 fi
+
+# rattler-build exports SHLIB_EXT=.not_implemented for staging builds;
+# derive it from target_platform like conda-build did (install-gcc.sh uses
+# it for the shared-library symlinks in lib/gcc/$TARGET/$gcc_version)
+if [[ "$target_platform" == osx-* ]]; then
+  export SHLIB_EXT=".dylib"
+elif [[ "$target_platform" == win-* ]]; then
+  export SHLIB_EXT=".dll"
+else
+  export SHLIB_EXT=".so"
+fi
 SYSROOT_DIR=${PREFIX}/${TARGET}/sysroot
 
 if [[ "$target_platform" == "osx-"* ]]; then
