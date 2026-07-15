@@ -341,7 +341,10 @@ outputs:
               # is not built at all for aarch64/riscv64 targets)
               - if: cross_target_win
                 then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libquadmath.*"
-              - if: target_platform == cross_target_platform and not cross_target_osx
+              # only for native linux: on win the shared library is a dll in
+              # bin/ (the old test asserted this for win too, but conda-build
+              # never ran tests for the cross-compiled win packages)
+              - if: target_platform == cross_target_platform and cross_target_linux
                 then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.so"
               - if: cross_target_linux
                 then:
@@ -360,34 +363,40 @@ outputs:
             - if: cross_target_stdlib != "None"
               then: ${{ cross_target_stdlib }}_${{ cross_target_platform }} ${{ cross_target_stdlib_version }}.*
         script:
-          - echo ${{ c_stdlib }}
-          - echo ${{ c_stdlib_version }}
-          - if: target_platform == cross_target_platform and not cross_target_osx
-            then: test `readlink ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.so` == "../../../libgomp.so"
-          - CC=$(${PREFIX}/bin/*-gcc -dumpmachine)-gcc
-          - if: target_platform == cross_target_platform and (x86_64 or s390x)
-            then: ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -Wl,-v -march=native
-          - if: target_platform == cross_target_platform and (not x86_64 and not s390x and not ppc64le and not riscv64)
-            then: ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -Wl,-v -mcpu=native
-          - if: not cross_target_win
-            then:
-              - ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -fsanitize=address
-              - ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v
-          - if: cross_target_platform == target_platform and not cross_target_win
-            then: ${CC} -Wall c_aligned.o -o c_aligned -v && ./c_aligned
-          - if: cross_target_platform == target_platform and linux
-            then: ${CC} -Wall c_aligned.o -o c_aligned -Wl,-rpath,/foo && ${{ TARGET }}-readelf -d c_aligned | grep RPATH | grep "/foo:${PREFIX}/lib"
-          - ${CC} -Wall tests/hello_world.c -c -o hello_world.o -v
-          - ${CC} -Wall hello_world.o -o hello_world -v
-          - if: cross_target_linux
-            then: test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.so
-          - if: cross_target_osx
-            then:
-              - test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.1.dylib
-              - find ${PREFIX}/${{ TARGET }} || true
-              - test ! -d ${PREFIX}/${{ TARGET }}
-          - if: cross_target_win
-            then: test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.a
+          env:
+            # the darwin cross compilers locate the macOS SDK through
+            # CONDA_BUILD_SYSROOT; rattler-build's cleared test environment
+            # does not inherit it from CI (conda-build's did)
+            CONDA_BUILD_SYSROOT: ${{ env.get("CONDA_BUILD_SYSROOT", default="") }}
+          content:
+            - echo ${{ c_stdlib }}
+            - echo ${{ c_stdlib_version }}
+            - if: target_platform == cross_target_platform and cross_target_linux
+              then: test `readlink ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.so` == "../../../libgomp.so"
+            - CC=$(${PREFIX}/bin/*-gcc -dumpmachine)-gcc
+            - if: target_platform == cross_target_platform and (x86_64 or s390x)
+              then: ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -Wl,-v -march=native
+            - if: target_platform == cross_target_platform and (not x86_64 and not s390x and not ppc64le and not riscv64)
+              then: ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -Wl,-v -mcpu=native
+            - if: not cross_target_win
+              then:
+                - ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v -fsanitize=address
+                - ${CC} -Wall tests/aligned_alloc.c -c -o c_aligned.o -v
+            - if: cross_target_platform == target_platform and not cross_target_win
+              then: ${CC} -Wall c_aligned.o -o c_aligned -v && ./c_aligned
+            - if: cross_target_platform == target_platform and linux
+              then: ${CC} -Wall c_aligned.o -o c_aligned -Wl,-rpath,/foo && ${{ TARGET }}-readelf -d c_aligned | grep RPATH | grep "/foo:${PREFIX}/lib"
+            - ${CC} -Wall tests/hello_world.c -c -o hello_world.o -v
+            - ${CC} -Wall hello_world.o -o hello_world -v
+            - if: cross_target_linux
+              then: test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.so
+            - if: cross_target_osx
+              then:
+                - test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.1.dylib
+                - find ${PREFIX}/${{ TARGET }} || true
+                - test ! -d ${PREFIX}/${{ TARGET }}
+            - if: cross_target_win
+              then: test -f ${PREFIX}/lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.a
     about:
       summary: GNU C Compiler
       homepage: https://gcc.gnu.org/
@@ -568,27 +577,33 @@ outputs:
             - if: cross_target_stdlib != "None"
               then: ${{ cross_target_stdlib }}_${{ cross_target_platform }} ${{ cross_target_stdlib_version }}.*
         script:
-          - CXX=$(${PREFIX}/bin/*-gcc -dumpmachine)-g++
-          - if: not cross_target_win
-            then: ${CXX} -Wall tests/aligned_alloc.cpp -c -o cpp_aligned.o --std=c++17
-          - if: cross_target_platform == target_platform and not cross_target_win
-            then: ${CXX} -Wall cpp_aligned.o -o cpp_aligned --std=c++17 && ./cpp_aligned
-          - ${CXX} -Wall tests/hello_world.cpp -c -o hello_world.o --std=c++17 -v
-          - ${CXX} -Wall hello_world.o -o hello_world --std=c++17 -v
-          # test tzdb integration
-          - if: match(gcc_maj_ver, ">=14") and cross_target_cxx_stdlib == "libstdcxx"
-            then:
-              - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb-override.cpp -c -o tzdb-override.o -v
-              - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb.cpp -c -o tzdb.o -v
-              - if: target_platform == cross_target_platform
-                then:
-                  - ${CXX} tzdb-override.o -o tzdb-override -v && ./tzdb-override
-                  - ${CXX} tzdb.o -o tzdb -v && ./tzdb
-                  - strace ./tzdb 2>&1 | grep ${CONDA_PREFIX}/lib/../share/zoneinfo/tzdata.zi
-                  # also test without any environment activation
-                  - unset PREFIX
-                  - unset CONDA_PREFIX
-                  - ./tzdb
+          env:
+            # the darwin cross compilers locate the macOS SDK through
+            # CONDA_BUILD_SYSROOT; rattler-build's cleared test environment
+            # does not inherit it from CI (conda-build's did)
+            CONDA_BUILD_SYSROOT: ${{ env.get("CONDA_BUILD_SYSROOT", default="") }}
+          content:
+            - CXX=$(${PREFIX}/bin/*-gcc -dumpmachine)-g++
+            - if: not cross_target_win
+              then: ${CXX} -Wall tests/aligned_alloc.cpp -c -o cpp_aligned.o --std=c++17
+            - if: cross_target_platform == target_platform and not cross_target_win
+              then: ${CXX} -Wall cpp_aligned.o -o cpp_aligned --std=c++17 && ./cpp_aligned
+            - ${CXX} -Wall tests/hello_world.cpp -c -o hello_world.o --std=c++17 -v
+            - ${CXX} -Wall hello_world.o -o hello_world --std=c++17 -v
+            # test tzdb integration
+            - if: match(gcc_maj_ver, ">=14") and cross_target_cxx_stdlib == "libstdcxx"
+              then:
+                - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb-override.cpp -c -o tzdb-override.o -v
+                - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb.cpp -c -o tzdb.o -v
+                - if: target_platform == cross_target_platform
+                  then:
+                    - ${CXX} tzdb-override.o -o tzdb-override -v && ./tzdb-override
+                    - ${CXX} tzdb.o -o tzdb -v && ./tzdb
+                    - strace ./tzdb 2>&1 | grep ${CONDA_PREFIX}/lib/../share/zoneinfo/tzdata.zi
+                    # also test without any environment activation
+                    - unset PREFIX
+                    - unset CONDA_PREFIX
+                    - ./tzdb
     about:
       summary: GNU C++ Compiler
       homepage: https://gcc.gnu.org/
