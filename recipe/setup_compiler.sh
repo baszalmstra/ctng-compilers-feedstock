@@ -46,6 +46,11 @@ fi
 export SDKROOT=${CONDA_BUILD_SYSROOT}
 unset CONDA_BUILD_SYSROOT
 
+# rattler-build exports PYTHON pointing into the host env, which contains no
+# python; isl's configure hard-errors ("Python interpreter is too old") when
+# $PYTHON is set but cannot be executed. conda-build never set it here.
+unset PYTHON
+
 extra_pkgs=()
 
 export CF_PREFIX=$SRC_DIR/cf-compilers
