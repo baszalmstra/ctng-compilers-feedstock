@@ -126,9 +126,19 @@ if [[ ! -d ${SRC_DIR}/cf-compilers ]]; then
 fi
 
 if [[ "${BUILD_PREFIX}" != "${PREFIX}" ]]; then
-  ln -sf ${CF_PREFIX}/${TARGET} ${BUILD_PREFIX}/${TARGET} || true
-  ln -sf ${CF_PREFIX}/bin ${BUILD_PREFIX}/bin || true
-  ln -sf ${CF_PREFIX}/share ${BUILD_PREFIX}/share || true
+  ln -sfn ${CF_PREFIX}/${TARGET} ${BUILD_PREFIX}/${TARGET} || true
+  # The build environment is not empty (it provides conda for this script),
+  # so ${BUILD_PREFIX}/bin and ${BUILD_PREFIX}/share exist as real
+  # directories: symlink the cf-compilers entries individually. A plain
+  # `ln -sf` of the whole directory would silently nest the link inside the
+  # existing directory (e.g. share/share) and hide gnuconfig and the
+  # cross-tools from $BUILD_PREFIX. -n keeps this idempotent when this
+  # script is sourced again.
+  mkdir -p ${BUILD_PREFIX}/bin ${BUILD_PREFIX}/share
+  for f in "${CF_PREFIX}"/bin/* "${CF_PREFIX}"/share/*; do
+    [ -e "$f" ] || continue
+    ln -sfn "$f" "${BUILD_PREFIX}/${f#"${CF_PREFIX}"/}" || true
+  done
 fi
 
 export PATH=$SRC_DIR/cf-compilers/bin:$PATH
