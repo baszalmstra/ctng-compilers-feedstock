@@ -38,7 +38,7 @@ source:
           - patches/mingw/${{ gcc_maj_ver }}/0005-Windows-Don-t-ignore-native-system-header-dir.patch
           - if: gcc_maj_ver == "13"
             then: patches/mingw/${{ gcc_maj_ver }}/0006-Windows-New-feature-to-allow-overriding.patch
-          - patches/mingw/${{ gcc_maj_ver }}/0007-Build-EXTRA-GNATTOOLS-for-Ada.patch
+          - patches/mingw/${{ gcc_maj_ver }}/0007-Build-EXTRA_GNATTOOLS-for-Ada.patch
           - patches/mingw/${{ gcc_maj_ver }}/0008-Prettify-linking-no-undefined.patch
           - patches/mingw/${{ gcc_maj_ver }}/0011-Enable-shared-gnat-implib.patch
           - patches/mingw/${{ gcc_maj_ver }}/0012-Handle-spaces-in-path-for-default-manifest.patch
@@ -52,10 +52,11 @@ source:
             then:
               - patches/mingw/${{ gcc_maj_ver }}/0300-override-builtin-printf-format.patch
               - patches/mingw/${{ gcc_maj_ver }}/2000-enable-rust.patch
-              - patches/mingw/${{ gcc_maj_ver }}/2001-fix-building-rust-on-mingw-w64.patch
+          - patches/mingw/${{ gcc_maj_ver }}/2001-fix-building-rust-on-mingw-w64.patch
+          - if: gcc_maj_ver == "13"
+            then:
               - patches/mingw/${{ gcc_maj_ver }}/2f7e7bfa3c6327793cdcdcb5c770b93cecd49bd0.patch
               - patches/mingw/${{ gcc_maj_ver }}/3eeb4801d6f45f6250fc77a6d3ab4e0115f8cfdd.patch
-            else: patches/mingw/${{ gcc_maj_ver }}/2001-fix-building-rust-on-mingw-w64.patch
           - if: gcc_maj_ver == "15"
             then: patches/mingw/${{ gcc_maj_ver }}/9002-native-tls.patch
       # Patches from https://github.com/Homebrew/formula-patches/tree/698885df7f624d0ce15bceb79a4d9760a473b502/gcc
@@ -96,8 +97,23 @@ outputs:
       script:
         file: build.sh
         env:
+          # Unlike conda-build, rattler-build does not export variant
+          # variables to the build script, so pass through everything
+          # build.sh, setup_compiler.sh and install-all.sh need.
           PKG_VERSION: ${{ version }}
           PKG_BUILDNUM: ${{ build_num }}
+          TARGET: ${{ TARGET }}
+          binutils_version: ${{ binutils_version }}
+          c_stdlib: ${{ c_stdlib }}
+          c_stdlib_version: ${{ c_stdlib_version }}
+          cross_target_cxx_stdlib: ${{ cross_target_cxx_stdlib }}
+          cross_target_platform: ${{ cross_target_platform }}
+          cross_target_stdlib: ${{ cross_target_stdlib }}
+          cross_target_stdlib_version: ${{ cross_target_stdlib_version }}
+          gcc_maj_ver: ${{ gcc_maj_ver }}
+          gcc_version: ${{ gcc_version }}
+          libgfortran_soname: ${{ libgfortran_soname }}
+          libgomp_ver: ${{ libgomp_ver }}
 
   - package:
       name: libgcc-devel_${{ cross_target_platform }}
@@ -209,8 +225,9 @@ outputs:
           - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/**"
           - "${{ path_prefix }}lib/libcc1*"
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/**"
-          - "${{ path_prefix }}share/info/libitm.info"
+          - "${{ path_prefix }}share/info/*.info"
           - "${{ path_prefix }}share/licenses/gcc/**"
+          - "${{ path_prefix }}share/locale/**"
           - "${{ path_prefix }}share/man/**"
         exclude:
           - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/conda.specs"
@@ -229,6 +246,13 @@ outputs:
           - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libsupc++*"
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/cc1plus*"
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/f951*"
+          # in gfortran_impl
+          - "${{ path_prefix }}share/info/gfortran.info"
+          # in libgcc
+          - "${{ path_prefix }}share/info/libgomp.info"
+          - "${{ path_prefix }}share/info/libquadmath.info"
+          # in libstdcxx
+          - "${{ path_prefix }}share/locale/**/libstdc++.mo"
       dynamic_linking:
         missing_dso_allowlist:
           - "*"
@@ -236,16 +260,16 @@ outputs:
       host:
         - if: cross_target_stdlib != "None"
           then: ${{ cross_target_stdlib }}_${{ cross_target_platform }} ==${{ cross_target_stdlib_version }}
-        - if: target_platform == cross_target_platform and not cross_target_osx
-          then:
-            - ${{ pin_subpackage("libgomp", exact=True) }}
-            - ${{ pin_subpackage("libstdcxx", exact=True) }}
         - if: target_platform == cross_target_platform
           then:
+            - if: not cross_target_osx
+              then:
+                - ${{ pin_subpackage("libgomp", exact=True) }}
+                - ${{ pin_subpackage("libstdcxx", exact=True) }}
             - ${{ pin_subpackage("libgcc", exact=True) }}
             - ${{ pin_subpackage("libgfortran" ~ libgfortran_soname) }}
-        - if: target_platform == cross_target_platform and not (win or osx)
-          then: ${{ pin_subpackage("libsanitizer", exact=True) }}
+            - if: not (win or osx)
+              then: ${{ pin_subpackage("libsanitizer", exact=True) }}
         - ${{ pin_subpackage("libgcc-devel_" ~ cross_target_platform, exact=True) }}
       run:
         - if: cross_target_osx
@@ -263,10 +287,11 @@ outputs:
                 - ${{ pin_subpackage("libgomp", upper_bound=None) }}
             - ${{ pin_subpackage("libstdcxx-devel_" ~ cross_target_platform, exact=True) }}
         - ${{ pin_subpackage("libgcc-devel_" ~ cross_target_platform, exact=True) }}
-        - if: target_platform == cross_target_platform and not (win or osx)
-          then: ${{ pin_subpackage("libsanitizer", exact=True) }}
         - if: target_platform == cross_target_platform
-          then: ${{ pin_subpackage("libgcc", upper_bound=None) }}
+          then:
+            - if: not (win or osx)
+              then: ${{ pin_subpackage("libsanitizer", exact=True) }}
+            - ${{ pin_subpackage("libgcc", upper_bound=None) }}
       run_exports:
         strong:
           - libgcc >=${{ gcc_version }}
@@ -459,7 +484,10 @@ outputs:
       files:
         - "${{ path_prefix }}bin/${{ TARGET }}-c++*"
         - "${{ path_prefix }}bin/${{ TARGET }}-g++*"
+        # the gdb pretty-printer hook lands in the target toolexeclib
+        # directory: lib/ for native builds, <triplet>/lib/ for cross builds
         - "${{ path_prefix }}lib/*-gdb.py"
+        - "${{ path_prefix }}${{ TARGET }}/lib/*-gdb.py"
         - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/cc1plus*"
         - "${{ path_prefix }}share/gcc-${{ gcc_version }}/**"
       dynamic_linking:
@@ -514,18 +542,20 @@ outputs:
             then: ${CXX} -Wall cpp_aligned.o -o cpp_aligned --std=c++17 && ./cpp_aligned
           - ${CXX} -Wall tests/hello_world.cpp -c -o hello_world.o --std=c++17 -v
           - ${CXX} -Wall hello_world.o -o hello_world --std=c++17 -v
+          # test tzdb integration
           - if: match(gcc_maj_ver, ">=14") and cross_target_cxx_stdlib == "libstdcxx"
             then:
               - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb-override.cpp -c -o tzdb-override.o -v
               - ${CXX} -isystem ${PREFIX}/include --std=c++20 -Wall tests/tzdb.cpp -c -o tzdb.o -v
-          - if: match(gcc_maj_ver, ">=14") and cross_target_cxx_stdlib == "libstdcxx" and target_platform == cross_target_platform
-            then:
-              - ${CXX} tzdb-override.o -o tzdb-override -v && ./tzdb-override
-              - ${CXX} tzdb.o -o tzdb -v && ./tzdb
-              - strace ./tzdb 2>&1 | grep ${CONDA_PREFIX}/lib/../share/zoneinfo/tzdata.zi
-              - unset PREFIX
-              - unset CONDA_PREFIX
-              - ./tzdb
+              - if: target_platform == cross_target_platform
+                then:
+                  - ${CXX} tzdb-override.o -o tzdb-override -v && ./tzdb-override
+                  - ${CXX} tzdb.o -o tzdb -v && ./tzdb
+                  - strace ./tzdb 2>&1 | grep ${CONDA_PREFIX}/lib/../share/zoneinfo/tzdata.zi
+                  # also test without any environment activation
+                  - unset PREFIX
+                  - unset CONDA_PREFIX
+                  - ./tzdb
     about:
       summary: GNU C++ Compiler
       homepage: https://gcc.gnu.org/
@@ -575,6 +605,7 @@ outputs:
         - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/include/ISO_Fortran_binding.h"
         - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran*"
         - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/f951*"
+        - "${{ path_prefix }}share/info/gfortran.info"
         - "${{ path_prefix }}share/licenses/gcc-fortran/**"
       dynamic_linking:
         missing_dso_allowlist:
@@ -592,8 +623,8 @@ outputs:
           then:
             - ${{ pin_subpackage("libgfortran" ~ libgfortran_soname, upper_bound=None) }}
             - ${{ pin_subpackage("libgcc", upper_bound=None) }}
-        - if: target_platform == cross_target_platform and cross_target_cxx_stdlib == "libstdcxx"
-          then: ${{ pin_subpackage("libstdcxx", upper_bound=None) }}
+            - if: cross_target_cxx_stdlib == "libstdcxx"
+              then: ${{ pin_subpackage("libstdcxx", upper_bound=None) }}
         - if: cross_target_stdlib != "None"
           then: ${{ cross_target_stdlib }}_${{ cross_target_platform }}
       run_exports:
@@ -685,6 +716,7 @@ outputs:
         - "${{ path_prefix }}lib/libstdc++.dll.a"
         - "${{ path_prefix }}bin/libstdc++-*.dll"
         - "${{ path_prefix }}share/licenses/libstdc++/**"
+        - "${{ path_prefix }}share/locale/**/libstdc++.mo"
       dynamic_linking:
         missing_dso_allowlist:
           - "*"
@@ -696,7 +728,8 @@ outputs:
       run:
         - ${{ pin_subpackage("libgcc", exact=True) }}
       run_constraints:
-        - libstdcxx-ng ==${{ version }} *_19
+        # avoid installing incompatible version of old name for this output
+        - libstdcxx-ng ==${{ version }} *_${{ build_num }}
     tests:
       - package_contents:
           files:
@@ -838,7 +871,8 @@ outputs:
           then: ${{ pin_subpackage("libgomp", exact=True) }}
         - if: win
           then: msys2-conda-epoch <0.0a0
-        - libgcc-ng ==${{ version }} *_19
+        # avoid installing incompatible version of old name for this output
+        - libgcc-ng ==${{ version }} *_${{ build_num }}
     tests:
       - package_contents:
           files:
@@ -951,7 +985,8 @@ outputs:
       run:
         - ${{ pin_subpackage("libgfortran" ~ libgfortran_soname, exact=True) }}
       run_constraints:
-        - libgfortran-ng ==${{ version }} *_19
+        # avoid installing incompatible version of old name for this output
+        - libgfortran-ng ==${{ version }} *_${{ build_num }}
     tests:
       - package_contents:
           strict: true
@@ -1057,7 +1092,7 @@ about:
     - COPYING3.LIB
 
 extra:
-  feedstock-name: ctng-compilers
+  feedstock-name: ctng-compilers-feedstock
   recipe-maintainers:
     - timsnyder
     - xhochy

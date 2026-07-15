@@ -52,8 +52,10 @@ source "${RECIPE_DIR}/install-gfortran.sh"
 
 if [[ "${target_platform}" == "${cross_target_platform}" ]]; then
   if [[ "${cross_target_platform}" == linux-* ]]; then
+    # (Re-)create the SONAME symlink packaged by _openmp_mutex. Use -f
+    # because installing gcc_impl above already recreated it.
     mkdir -p "${PREFIX}/lib"
-    ln -s "libgomp.so.${libgomp_ver}" "${PREFIX}/lib/libgomp.so.${libgomp_ver:0:1}"
+    ln -sf "libgomp.so.${libgomp_ver}" "${PREFIX}/lib/libgomp.so.${libgomp_ver:0:1}"
   fi
 
   export PKG_NAME=conda-gcc-specs
