@@ -158,20 +158,19 @@ outputs:
     tests:
       - package_contents:
           files:
-            exists:
-              - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc.a"
-              - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_eh.a"
-              - if: cross_target_osx
-                then:
-                  - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/crtfastmath.o"
-                  - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.1.dylib"
-                  - if: cross_target_platform == "osx-64"
-                    then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.dylib"
-                else: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/crtbegin.o"
-              - if: cross_target_win
-                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.a"
-              - if: cross_target_linux
-                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.so"
+            - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc.a"
+            - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_eh.a"
+            - if: cross_target_osx
+              then:
+                - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/crtfastmath.o"
+                - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.1.dylib"
+                - if: cross_target_platform == "osx-64"
+                  then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.1.dylib"
+              else: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/crtbegin.o"
+            - if: cross_target_win
+              then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.a"
+            - if: cross_target_linux
+              then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgcc_s.so"
     about:
       summary: The GNU C development libraries and object files
       homepage: https://gcc.gnu.org/
@@ -238,7 +237,6 @@ outputs:
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/**"
           - "${{ path_prefix }}share/info/*.info"
           - "${{ path_prefix }}share/licenses/gcc/**"
-          - "${{ path_prefix }}share/locale/**"
           - "${{ path_prefix }}share/man/**"
         exclude:
           - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/conda.specs"
@@ -264,8 +262,6 @@ outputs:
           # in libgcc
           - "${{ path_prefix }}share/info/libgomp.info"
           - "${{ path_prefix }}share/info/libquadmath.info"
-          # in libstdcxx
-          - "${{ path_prefix }}share/locale/**/libstdc++.mo"
       dynamic_linking:
         missing_dso_allowlist:
           - "*"
@@ -655,14 +651,13 @@ outputs:
           bin:
             - ${{ TARGET }}-gfortran
           files:
-            exists:
-              - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.a"
-              - if: cross_target_win
-                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.dll.a"
-              - if: cross_target_osx
-                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.dylib"
-              - if: cross_target_linux
-                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.so"
+            - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.a"
+            - if: cross_target_win
+              then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.dll.a"
+            - if: cross_target_osx
+              then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.dylib"
+            - if: cross_target_linux
+              then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgfortran.so"
       - files:
           recipe:
             - tests/fortomp/**
@@ -733,7 +728,6 @@ outputs:
           - "${{ path_prefix }}lib/libstdc++.dll.a"
           - "${{ path_prefix }}bin/libstdc++-*.dll"
           - "${{ path_prefix }}share/licenses/libstdc++/**"
-          - "${{ path_prefix }}share/locale/**/libstdc++.mo"
         exclude:
           # the gdb pretty-printer hook (libstdc++.so.*-gdb.py) belongs to
           # gxx_impl, but matches the lib/libstdc++.so* glob above
@@ -788,10 +782,9 @@ outputs:
     tests:
       - package_contents:
           lib:
-            exists:
-              - asan
-              - if: x86_64 or aarch64
-                then: hwasan
+            - asan
+            - if: x86_64 or aarch64
+              then: hwasan
       - requirements:
           run:
             - if: cross_target_stdlib != "None"
@@ -897,13 +890,12 @@ outputs:
     tests:
       - package_contents:
           files:
-            exists:
-              - if: win
-                then: "${{ path_prefix }}bin/libgcc_s_*-*.dll"
-              - if: osx
-                then: "${{ path_prefix }}lib/libgcc_s.1.dylib"
-              - if: linux
-                then: "${{ path_prefix }}lib/libgcc_s.so"
+            - if: win
+              then: "${{ path_prefix }}bin/libgcc_s_*-*.dll"
+            - if: osx
+              then: "${{ path_prefix }}lib/libgcc_s.1.dylib"
+            - if: linux
+              then: "${{ path_prefix }}lib/libgcc_s.so"
       - if: linux
         then:
           - requirements:
@@ -989,15 +981,14 @@ outputs:
           # spelled out per platform: the mingw names (libgfortran-*.dll,
           # libgfortran.dll.a) do not match what a plain `lib:` entry expects
           files:
-            exists:
-              - if: cross_target_win
-                then:
-                  - "${{ path_prefix }}bin/libgfortran-*.dll"
-                  - "${{ path_prefix }}lib/libgfortran.dll.a"
-              - if: cross_target_osx
-                then: "${{ path_prefix }}lib/libgfortran.dylib"
-              - if: cross_target_linux
-                then: "${{ path_prefix }}lib/libgfortran.so"
+            - if: cross_target_win
+              then:
+                - "${{ path_prefix }}bin/libgfortran-*.dll"
+                - "${{ path_prefix }}lib/libgfortran.dll.a"
+            - if: cross_target_osx
+              then: "${{ path_prefix }}lib/libgfortran.dylib"
+            - if: cross_target_linux
+              then: "${{ path_prefix }}lib/libgfortran.so"
     about:
       summary: The GNU Fortran Runtime Library
       homepage: https://gcc.gnu.org/
@@ -1124,7 +1115,8 @@ about:
     - COPYING3.LIB
 
 extra:
-  feedstock-name: ctng-compilers-feedstock
+  # repository name minus the -feedstock suffix, per conda-forge convention
+  feedstock-name: ctng-compilers
   recipe-maintainers:
     - timsnyder
     - xhochy
