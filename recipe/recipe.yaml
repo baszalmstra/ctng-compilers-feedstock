@@ -8,6 +8,8 @@ context:
   cross_target_win: ${{ cross_target_platform == "win-64" }}
   libgcc_devel_build_num: ${{ build_num + 100 if target_platform == cross_target_platform else build_num }}
   invalid_configuration: ${{ (win and not cross_target_win) or ((cross_target_osx or osx) and match(gcc_maj_ver, "<15")) or ((cross_target_platform == "linux-riscv64" or riscv64) and match(gcc_maj_ver, "<15")) }}
+  # first component of libgomp_ver (which the shell scripts derive as
+  # ${libgomp_ver:0:1}); keep in sync with conda_build_config.yaml
   libgomp_soname: 1
   path_prefix: ${{ "Library/" if win else "" }}
 
@@ -97,9 +99,10 @@ outputs:
       script:
         file: build.sh
         env:
-          # Unlike conda-build, rattler-build does not export variant
-          # variables to the build script, so pass through everything
-          # build.sh, setup_compiler.sh and install-all.sh need.
+          # Unlike conda-build, rattler-build only exports variant variables
+          # that this staging output itself consumes, so explicitly pass
+          # through everything build.sh, setup_compiler.sh and the
+          # install-*.sh scripts need.
           PKG_VERSION: ${{ version }}
           PKG_BUILDNUM: ${{ build_num }}
           TARGET: ${{ TARGET }}
@@ -246,7 +249,9 @@ outputs:
           - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libsupc++*"
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/cc1plus*"
           - "${{ path_prefix }}libexec/gcc/${{ TARGET }}/${{ gcc_version }}/f951*"
-          # in gfortran_impl
+          # in gfortran_impl (the gfortran man page, in contrast, stays in
+          # share/man/** above: gcc's install-man installs the man pages of
+          # all enabled languages)
           - "${{ path_prefix }}share/info/gfortran.info"
           # in libgcc
           - "${{ path_prefix }}share/info/libgomp.info"
@@ -307,7 +312,9 @@ outputs:
             exists:
               - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.spec"
               - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.*"
-              - "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libquadmath.*"
+              # libquadmath only exists for x86/ppc targets
+              - if: cross_target_win
+                then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libquadmath.*"
               - if: target_platform == cross_target_platform and not cross_target_osx
                 then: "${{ path_prefix }}lib/gcc/${{ TARGET }}/${{ gcc_version }}/libgomp.so"
               - if: cross_target_linux
@@ -711,12 +718,17 @@ outputs:
         - target_platform != cross_target_platform
         - cross_target_cxx_stdlib != "libstdcxx"
       files:
-        - "${{ path_prefix }}lib/libstdc++.so*"
-        - "${{ path_prefix }}lib/libstdc++.dylib*"
-        - "${{ path_prefix }}lib/libstdc++.dll.a"
-        - "${{ path_prefix }}bin/libstdc++-*.dll"
-        - "${{ path_prefix }}share/licenses/libstdc++/**"
-        - "${{ path_prefix }}share/locale/**/libstdc++.mo"
+        include:
+          - "${{ path_prefix }}lib/libstdc++.so*"
+          - "${{ path_prefix }}lib/libstdc++.dylib*"
+          - "${{ path_prefix }}lib/libstdc++.dll.a"
+          - "${{ path_prefix }}bin/libstdc++-*.dll"
+          - "${{ path_prefix }}share/licenses/libstdc++/**"
+          - "${{ path_prefix }}share/locale/**/libstdc++.mo"
+        exclude:
+          # the gdb pretty-printer hook (libstdc++.so.*-gdb.py) belongs to
+          # gxx_impl, but matches the lib/libstdc++.so* glob above
+          - "${{ path_prefix }}lib/*-gdb.py"
       dynamic_linking:
         missing_dso_allowlist:
           - "*"
@@ -883,13 +895,14 @@ outputs:
                 then: "${{ path_prefix }}lib/libgcc_s.1.dylib"
               - if: linux
                 then: "${{ path_prefix }}lib/libgcc_s.so"
-      - requirements:
-          run:
-            - if: cross_target_stdlib != "None"
-              then: ${{ cross_target_stdlib }}_${{ cross_target_platform }}
-        script:
-          - if: linux
-            then:
+      - if: linux
+        then:
+          - requirements:
+              run:
+                - if: cross_target_stdlib != "None"
+                  then: ${{ cross_target_stdlib }}_${{ cross_target_platform }}
+            script:
+              # provided by the _openmp_mutex run dependency
               - test -f ${PREFIX}/lib/libgomp.so.${{ libgomp_soname }}
               - test `readlink ${PREFIX}/lib/libgomp.so.${{ libgomp_soname }}` == "libgomp.so.${{ libgomp_ver }}"
     about:
@@ -964,8 +977,18 @@ outputs:
         - libgfortran ==${{ gcc_version }}
     tests:
       - package_contents:
-          lib:
-            - gfortran
+          # spelled out per platform: the mingw names (libgfortran-*.dll,
+          # libgfortran.dll.a) do not match what a plain `lib:` entry expects
+          files:
+            exists:
+              - if: cross_target_win
+                then:
+                  - "${{ path_prefix }}bin/libgfortran-*.dll"
+                  - "${{ path_prefix }}lib/libgfortran.dll.a"
+              - if: cross_target_osx
+                then: "lib/libgfortran.dylib"
+              - if: cross_target_linux
+                then: "lib/libgfortran.so"
     about:
       summary: The GNU Fortran Runtime Library
       homepage: https://gcc.gnu.org/
