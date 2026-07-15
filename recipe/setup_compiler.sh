@@ -131,19 +131,29 @@ if [[ ! -d ${SRC_DIR}/cf-compilers ]]; then
 fi
 
 if [[ "${BUILD_PREFIX}" != "${PREFIX}" ]]; then
-  ln -sfn ${CF_PREFIX}/${TARGET} ${BUILD_PREFIX}/${TARGET} || true
-  # The build environment is not empty (it provides conda for this script),
-  # so ${BUILD_PREFIX}/bin and ${BUILD_PREFIX}/share exist as real
-  # directories: symlink the cf-compilers entries individually. A plain
-  # `ln -sf` of the whole directory would silently nest the link inside the
-  # existing directory (e.g. share/share) and hide gnuconfig and the
-  # cross-tools from $BUILD_PREFIX. -n keeps this idempotent when this
-  # script is sourced again.
-  mkdir -p ${BUILD_PREFIX}/bin ${BUILD_PREFIX}/share
-  for f in "${CF_PREFIX}"/bin/* "${CF_PREFIX}"/share/*; do
-    [ -e "$f" ] || continue
-    ln -sfn "$f" "${BUILD_PREFIX}/${f#"${CF_PREFIX}"/}" || true
-  done
+  # The build environment is not empty (it provides conda, whose
+  # dependencies ship e.g. bin/, share/ and ld_impl's ${TARGET}/bin), so
+  # these directories may already exist. Merge the cf-compilers tree into
+  # it by symlinking entries, descending into existing real directories:
+  # a plain `ln -sf` of a whole directory silently nests the link inside
+  # an existing directory (share/share) and hides gnuconfig, the sysroot
+  # and the cross tools from the build.
+  merge_link_entries() {
+    local src=$1 dst=$2 entry base
+    mkdir -p "$dst"
+    for entry in "$src"/*; do
+      [ -e "$entry" ] || continue
+      base=$(basename "$entry")
+      if [ -d "$dst/$base" ] && [ ! -L "$dst/$base" ]; then
+        merge_link_entries "$entry" "$dst/$base"
+      else
+        ln -sfn "$entry" "$dst/$base"
+      fi
+    done
+  }
+  merge_link_entries "${CF_PREFIX}/${TARGET}" "${BUILD_PREFIX}/${TARGET}"
+  merge_link_entries "${CF_PREFIX}/bin" "${BUILD_PREFIX}/bin"
+  merge_link_entries "${CF_PREFIX}/share" "${BUILD_PREFIX}/share"
 fi
 
 export PATH=$SRC_DIR/cf-compilers/bin:$PATH
